@@ -280,6 +280,32 @@ const d2: Array<[Record<string, unknown>|null, Property]> = [
                 }
             })
         }
+    ],
+    [
+        {
+            description: "Certificates",
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    "pem": {
+                        type: "string",
+                        description: "PEM of certificate"
+                    }
+                }
+            }
+        },
+        {
+            description: "Certificates",
+            type: ArrayT(ObjectT({
+                pem: {
+                    type: StringT,
+                    description: "PEM of certificate",
+                    previewVersion: [2021,1,3],
+                }
+            })),
+            previewVersion: [2021,1,3]
+        }
     ]
 ];
 for (const i in d2) {
