@@ -18,21 +18,35 @@ import {
 
     // Property,
     // serializeProperty,
-    // StringT,
-    // BoolT,
-    // Int32T,
-    // Int64T,
-    // FloatT,
-    // EnumT,
-    // SecretT,
-    // ArrayT,
-    // ObjectT,
+
+    FieldType,
+    StringT,
+    BoolT,
+    Int32T,
+    Int64T,
+    FloatT,
+    EnumT,
+    ArrayT,
+    ObjectT,
+    serializeFieldType,
+
+    Definition,
+    definitionsFromFieldType,
+    serializeDefinition,
+
+    // TODO: concatRecords
+
+
     // serializePathSuffix,
     // resourceType,
 } from "../src/main.ts";
 
 //#region Mutability tests
 [
+    {
+        expected: {},
+        input: undefined,
+    },
     {
         expected: {
             readOnly: true,
@@ -66,7 +80,7 @@ import {
         },
         input: new Set([Mutability.Create, Mutability.Write, Mutability.Read])
     }
-].forEach(datum => Deno.test(`serializeMutability(${JSON.stringify(Array.from(datum.input))})`, () => {
+].forEach(datum => Deno.test(`serializeMutability(${JSON.stringify(Array.from(datum.input||[]))})`, () => {
     const found = serializeMutability(datum.input);
     assertEquals(datum.expected, found);
 }));
@@ -172,9 +186,312 @@ Deno.test("serializeVersion", () => {
 })
 //#endregion
 
+//#region Field types and definitions
+const serializeFieldTypeData: Array<{expected: Record<string,unknown>, input: FieldType}> = [
+    {
+        expected: { type: "string" },
+        input: StringT
+    },
+    {
+        expected: { type: "boolean"},
+        input: BoolT
+    },
+    {
+        expected: { type: "integer", format: "int32" },
+        input: Int32T
+    },
+    {
+        expected: { type: "integer", format: "int64" },
+        input: Int64T
+    },
+    {
+        expected: { type: "number", format: "double" },
+        input: FloatT
+    },
+    {
+        expected: { 
+            type: "string", 
+            enum: ["Alpha", "Beta", "Gamma"], 
+            "x-ms-enum": {
+                modelAsString: true,
+                name: "SomethingLong"
+            }
+        },
+        input: EnumT("SomethingLong", ["Alpha", "Beta", "Gamma"])
+    },
+    {
+        expected: {
+            type: "array",
+            items: {
+                type: "number",
+                format: "double"
+            }
+        },
+        input: ArrayT(FloatT)
+    },
+    {
+        expected: {
+            type: "array",
+            items: {
+                type: "array",
+                items: {
+                    type: "string"
+                }
+            }
+        },
+        input: ArrayT(ArrayT(StringT))
+    },
+    {
+        expected: {
+            "$ref": "#/definitions/MyDefinition"
+        },
+        input: { kind: "xref", target: "MyDefinition" }
+    },
+    {
+        expected: {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/SomeType"
+            }
+        },
+        input: ArrayT({ kind: "xref", target: "SomeType" })
+    }
+];
+serializeFieldTypeData.forEach(datum => Deno.test(
+    `serializeFieldType(${JSON.stringify(datum.input)})`, () => {
+        assertEquals(
+            datum.expected,
+            serializeFieldType(datum.input)
+        );
+    }
+));
 
 
+const definitionsFromFieldTypeData: Array<{expected: Record<string,Definition>, ft: FieldType, targetVersion: TargetVersion}> = [
+    {
+        // No definitions from basic types
+        expected: {},
+        ft: StringT,
+        targetVersion: [VersionB, VersionKind.GA]
+    },
+    {
+        // Simple properties, properly versioned
+        expected: {
+            'Definition1': {
+                description: "Hello",
+                properties: {
+                    'boris': {
+                        description: 'Boris property',
+                        type: StringT,
+                        gaVersion: VersionA,
+                    },
+                    'hilda': {
+                        description: 'Hilda property',
+                        type: ArrayT(Int32T),
+                        gaVersion: VersionA,
+                    }
+                }
+            }
+        },
+        ft: ObjectT(
+            'Definition1',
+            'Hello',
+            {
+                'boris': {
+                    description: 'Boris property',
+                    type: StringT,
+                    gaVersion: VersionA,
+                },
+                'hilda': {
+                    description: 'Hilda property',
+                    type: ArrayT(Int32T),
+                    gaVersion: VersionA,
+                },
+                'meep': {
+                    description: 'Meep property',
+                    type: BoolT,
+                    gaVersion: VersionC,
+                }
+            }
+        ),
+        targetVersion: [VersionB, VersionKind.GA]
+    },
+    {
+        expected: {
+            'Definition1': {
+                description: "Hello",
+                properties: {
+                    'boris': {
+                        description: 'Boris property',
+                        type: { kind: "xref", target: "Definition2" },
+                        gaVersion: VersionA,
+                    },
+                    'hortense': {
+                        description: 'Hortense property',
+                        type: { kind: "xref", target: "Definition2" },
+                        gaVersion: VersionA,
+                    },
+                }
+            },
+            'Definition2': {
+                description: "Goodbye",
+                properties: {
+                    'meep': {
+                        description: 'Meep',
+                        type: StringT,
+                        gaVersion: VersionA
+                    }
+                }
+            }
+        },
+        ft: ObjectT(
+            'Definition1',
+            'Hello',
+            {
+                'boris': {
+                    description: 'Boris property',
+                    type: ObjectT(
+                        'Definition2',
+                        'Goodbye',
+                        {
+                            meep: {
+                                description: 'Meep',
+                                type: StringT,
+                                gaVersion: VersionA
+                            }
+                        }
+                    ),
+                    gaVersion: VersionA,
+                },
+                'hilda': {
+                    description: 'Hilda property',
+                    type: ObjectT(
+                        'Definition2',
+                        'Goodbye',
+                        {
+                            meep: {
+                                description: 'Meep',
+                                type: StringT,
+                                gaVersion: VersionA
+                            }
+                        }
+                    ),
+                    gaVersion: VersionC,
+                },
+                'hortense': {
+                    description: 'Hortense property',
+                    type: ObjectT(
+                        'Definition2',
+                        'Goodbye',
+                        {
+                            meep: {
+                                description: 'Meep',
+                                type: StringT,
+                                gaVersion: VersionA
+                            }
+                        }
+                    ),
+                    gaVersion: VersionA,
+                }
+            }
+        ),
+        targetVersion: [VersionB, VersionKind.GA]
+    }
+];
+definitionsFromFieldTypeData.forEach(datum => Deno.test(
+    `definitionsFromFieldType(${JSON.stringify(datum.ft)}, ${JSON.stringify(datum.targetVersion)})`,
+    () => {
+        assertEquals(
+            datum.expected,
+            definitionsFromFieldType(datum.ft, datum.targetVersion)
+        );
+    }
+));
 
+const serializeDefinitionTestData: Array<{expected: Record<string,unknown>, input: Definition}> = [
+    {
+        expected: {
+            description: "Hello",
+            type: "object",
+            properties: {},
+            required: []
+        },
+        input: {
+            description: "Hello",
+            properties: {}
+        }
+    },
+    {
+        expected: {
+            description: "Goodbye",
+            type: "object",
+            required: ["alpha", "gamma"],
+            properties: {
+                alpha: {
+                    description: "Alpha",
+                    type: "string",
+                    readOnly: true,
+                    "x-ms-mutability": ["read"],
+                },
+                beta: {
+                    description: "Beta",
+                    type: "string",
+                    "x-ms-secret": true,
+                    "x-ms-mutability": ["create"]
+                },
+                gamma: {
+                    description: "Gamma",
+                    type: "array",
+                    items: {
+                        type: "integer",
+                        format: "int32"
+                    }
+                },
+                delta: {
+                    description: "Delta",
+                    "$ref": "#/definitions/Definition2"
+                }
+            }
+        },
+        input: {
+            description: "Goodbye",
+            properties: {
+                alpha: {
+                    description: "Alpha",
+                    type: StringT,
+                    mutability: ReadOnly,
+                    required: true,
+                },
+                beta: {
+                    description: "Beta",
+                    type: StringT,
+                    mutability: ImmutableSecret
+                },
+                gamma: {
+                    description: "Gamma",
+                    type: ArrayT(Int32T),
+                    required: true,
+                },
+                delta: {
+                    description: "Delta",
+                    type: { kind: "xref", target: "Definition2" }
+                }
+            }
+        }
+    }
+];
+serializeDefinitionTestData.forEach(datum => Deno.test(
+    `serializeDefinition(${JSON.stringify(datum.input)})`,
+    () => {
+        assertEquals(
+            datum.expected,
+            serializeDefinition(datum.input)
+        );
+    }
+));
+
+
+//#endregion
 
 // Deno.test("concatObjects works", () => {
 //     const expected = {alpha: 42, beta: 36, gamma: [{a: 12}, {b: 32}]};
@@ -185,35 +502,6 @@ Deno.test("serializeVersion", () => {
 //     assertEquals(expected, found);
 // });
 
-// Deno.test("serializeMutability", () => {
-//     assertEquals([], serializeMutability(new Set([])));
-//     assertEquals(["create", "read", "write"], serializeMutability(new Set([Mutability.Write, Mutability.Read, Mutability.Create])));
-//     assertEquals(["read"], serializeMutability(ReadOnly));
-//     assertEquals(["create"], serializeMutability(CreateOnly));
-//     assertEquals(["create", "read"], serializeMutability(Immutable));
-// })
-
-
-
-// const v: TargetVersion = [[2022,1,1], VersionKind.Preview];
-
-// Deno.test("Non-secret properties must be readable", () => {
-//     assertThrows(() => serializeProperty("myProperty", v, {
-//         description: "Nothing",
-//         type: StringT,
-//         mutability: CreateOnly,
-//         previewVersion: [2021,1,3],
-//     }));
-// })
-
-// Deno.test("Secret fields must not be readable", () => {
-//     assertThrows(() => serializeProperty("myProperty", v, {
-//         description: "Nothing",
-//         type: SecretT(BoolT),
-//         mutability: Immutable,
-//         previewVersion: [2021,1,3],
-//     }));
-// })
 
 // const d2: Array<[Record<string, unknown>|null, Property]> = [
 //     [

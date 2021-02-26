@@ -12,6 +12,24 @@ export function concatObjects(objs: Array<Record<string,unknown>>): Record<strin
     return result;
 }
 
+export function concatRecords<T>(records: Array<Record<string,T>>): Record<string,T> {
+    const result: Record<string,T> = {}
+    records.forEach(obj => {
+        for (const key in obj) {
+            if (result.hasOwnProperty(key)) {
+                const orig = JSON.stringify(result[key]);
+                const next = JSON.stringify(obj[key]);
+                if (orig != next) {
+                    throw Error(`Conflicting definitions found of key ${key}.`)
+                }
+            } else {
+                result[key] = obj[key];
+            }
+        }
+    });
+    return result;
+}
+
 //#region Mutability
 /**
  * Mutability of properties
@@ -43,7 +61,10 @@ export const MutableSecret = new Set([Mutability.Create, Mutability.Write]);
 export const ReadOnly = new Set([Mutability.Read]);
 export const Immutable = new Set([Mutability.Create, Mutability.Read]);
 
-export function serializeMutability(mt: Set<Mutability>) {
+export function serializeMutability(mt: Set<Mutability>|undefined) {
+    if (!mt) {
+        return {};
+    }
     const target: Record<string,unknown> = {};
     target["x-ms-mutability"] = Array.from(mt).sort();
     if (mt == ReadOnly) {
@@ -115,126 +136,240 @@ export function serializeVersion(version: TargetVersion): string {
 }
 //#endregion
 
+//#region Definitions
+/**
+ * The third part of a Swagger file is its definitions. These given the
+ * schemas of various structures accepted and returned by endpoints.
+ * 
+ * A definition always an object type. Its properties are either non-object
+ * fields or a reference to another definition.
+ */
+export interface Definition {
+    description: string,
+    properties: Record<string, Property>
+}
 
-// export function serializeVersion(version: TargetVersion): string {
-//     const [[year,month,day], kind] = version;
-//     const pad = (n: number) => n < 10 ? "0" + n : n.toString();
-//     let versionString = `${year}-${pad(month)}-${pad(day)}`
-//     if (kind == VersionKind.Preview) {
-//         versionString += "-preview";
-//     }
-//     return versionString;
-// }
+//#endregion
 
 
+//#region Field types
+/**
+ * We specify the types of fields with (possibly nested) specifiers.
+ * Simple types, like booleans or integers, are represented by constants
+ * like BoolT and Int32T, which are themselves members of a discriminated
+ * union.
+ * 
+ * The one special case is objects. Objects generally are supposed to have
+ * their own entries in the definitions section of a Swagger file and be
+ * referred to with a `"$ref"` entry where they are used. When we serialize
+ * fields we have two things to serialize. We need to serialize the actual
+ * type description with references to other definitions, and we need
+ * to serialize any definitions that emerge from the type description.
+ * 
+ * Fields are versioned, so we pass TargetVersions into all methods that operate
+ * on them, and return null if there would be nothing generated.
+ */
 
-// // Field types
-// interface RequiredField { required?: boolean }
+interface RequiredField { required?: boolean }
 
-// interface BoolField { kind: "bool" }
-// interface StringField { kind: "string" }
-// interface Int32Field { kind: "int32" }
-// interface Int64Field { kind: "int64" }
-// interface FloatField { kind: "float" }
-// interface ArrayField { kind: "array", elementKind: FieldType }
-// interface ObjectField { kind: "object", properties: Record<string, Property&RequiredField> }
-// interface SecretField { kind: "secret", innerKind: FieldType }
-// interface EnumField { kind: "enum", values: Array<string> }
+interface BoolField { kind: "bool" }
+interface StringField { kind: "string" }
+interface Int32Field { kind: "int32" }
+interface Int64Field { kind: "int64" }
+interface FloatField { kind: "float" }
+interface ArrayField { kind: "array", elementKind: FieldType }
+interface EnumField { kind: "enum", typeName: string, values: Array<string> }
+interface ObjectField { 
+    kind: "object", 
+    definitionName: string, 
+    description: string,
+    properties: Record<string, Property> 
+}
+interface XRefField { kind: "xref", target: string }
 
-// export type FieldType = 
-//     | BoolField
-//     | StringField
-//     | Int32Field
-//     | Int64Field
-//     | FloatField
-//     | ArrayField
-//     | ObjectField
-//     | SecretField
-//     | EnumField
+ export type FieldType = 
+    | BoolField
+    | StringField
+    | Int32Field
+    | Int64Field
+    | FloatField
+    | ArrayField
+    | ObjectField
+    | EnumField
+    | XRefField
 
-// export const BoolT: BoolField = { kind: "bool" }
-// export const StringT: StringField = { kind: "string" }
-// export const Int32T: Int32Field = { kind: "int32" }
-// export const Int64T: Int64Field = { kind: "int64" }
-// export const FloatT: FloatField = { kind: "float" }
-// export function ArrayT(t: FieldType): ArrayField { return { kind: "array", elementKind: t } }
-// export function ObjectT(ps: Record<string, Property&RequiredField>): ObjectField { return { kind: "object", properties: ps }; }
-// export function SecretT(t: FieldType): SecretField { return { kind: "secret", innerKind: t } }
-// export function EnumT(vs: Array<string>): EnumField { return { kind: "enum", values: vs } }
+export const BoolT: BoolField = { kind: "bool" };
+export const StringT: StringField = { kind: "string" };
+export const Int32T: Int32Field = { kind: "int32" };
+export const Int64T: Int64Field = { kind: "int64" };
+export const FloatT: FloatField = { kind: "float" };
+export function ArrayT(t: FieldType): ArrayField {
+    return { kind: "array", elementKind: t } 
+}
+export function ObjectT(definitionName: string, description: string, properties: Record<string, Property>): ObjectField { 
+    return { 
+        kind: "object", 
+        definitionName: definitionName, 
+        description: description, 
+        properties: properties 
+    }; 
+}
+export function EnumT(typeName: string, vs: Array<string>): EnumField { 
+    return { kind: "enum", typeName: typeName, values: vs };
+}
 
-// export interface Property extends Versioned {
-//     description: string;
-//     type: FieldType;
-//     mutability?: Set<Mutability>;
-// }
+interface Property extends Versioned {
+    description: string;
+    type: FieldType;
+    mutability?: Set<Mutability>;
+    required?: boolean;
+}
 
-// function serializeFieldType(name: string, targetVersion: TargetVersion, ft: FieldType, target: Record<string, unknown>) {
-//     switch (ft.kind) {
-//         case "string":
-//             target.type = "string";
-//             break;
-//         case "bool":
-//             target.type = "boolean";
-//             break;
-//         case "int32":
-//             target.type = "integer";
-//             target.format = "int32";
-//             break;
-//         case "int64":
-//             target.type = "integer";
-//             target.format = "int64";
-//             break;
-//         case "float":
-//             target.type = "number";
-//             target.format = "double";
-//             break;
-//         case "enum":
-//             target.type = "string";
-//             target.enum = ft.values;
-//             target["x-ms-enum"] = {
-//                 modelAsString: true,
-//                 name: name.charAt(0).toUpperCase() + name.slice(1) + "Enum",
-//             };
-//             break;
-//         case "secret":
-//             target["x-ms-secret"] = true;
-//             if (ft.innerKind.kind == "secret") {
-//                 throw Error("Inner kind of SecretT must not be secret.");
-//             }
-//             serializeFieldType(name, targetVersion, ft.innerKind, target);
-//             break;
-//         case "array":
-//             target.type = "array";
-//             {
-//                 const subTarget = {}
-//                 serializeFieldType(name, targetVersion, ft.elementKind, subTarget);
-//                 target.items = subTarget;
-//             }
-//             break;
-//         case "object":
-//             target.type = "object";
-//             target.properties = {};
-//             {
-//                 const requiredProperties = [];
-//                 const properties: Record<string, unknown> = {}
-//                 for (const propertyName in ft.properties) {
-//                     const pr = ft.properties[propertyName];
-//                     const sp = serializeProperty(propertyName, targetVersion, pr);
-//                     if (sp != null) {
-//                         properties[propertyName] = sp;
-//                     }
-//                     if (pr?.required) {
-//                         requiredProperties.push(propertyName);
-//                     }
-//                 }
-//                 target.properties = properties;
-//                 if (requiredProperties.length > 0) {
-//                     target.required = requiredProperties;
-//                 }
-//             }
-//             break;
+export function serializeFieldType(ft: FieldType): Record<string,unknown> {
+    const target: Record<string,unknown> = {};
+    switch (ft.kind) {
+        case "string":
+            target.type = "string";
+            break;
+        case "bool":
+            target.type = "boolean";
+            break;
+        case "int32":
+            target.type = "integer";
+            target.format = "int32";
+            break;
+        case "int64":
+            target.type = "integer";
+            target.format = "int64";
+            break;
+        case "float":
+            target.type = "number";
+            target.format = "double";
+            break;
+        case "enum":
+            target.type = "string";
+            target.enum = ft.values;
+            target["x-ms-enum"] = {
+                modelAsString: true,
+                name: ft.typeName,
+            };
+            break;
+        case "array":
+            target.type = "array";
+            target.items = serializeFieldType(ft.elementKind);
+            break;
+        case "xref":
+            target["$ref"] = `#/definitions/${ft.target}`
+            break;
+        case "object":
+            throw Error('Cannot serialize field type object.');
+    }
+    return target;
+}
+
+export function definitionsFromFieldType(
+    ft: FieldType, targetVersion: TargetVersion
+): Record<string,Definition> {
+    if (ft.kind != 'object') {
+        return {};
+    }
+
+    let definitions: Record<string, Definition> = {};
+
+    const definition: Definition = {
+        description: ft.description,
+        properties: {}
+    }
+
+    for (const key in ft.properties) {
+        const property = ft.properties[key];
+
+        if (!inVersion(property, targetVersion)) {
+            // This property isn't defined in this version,
+            // so we won't be needing any definitions from it.
+            continue;
+        }
+
+        if (property.type.kind != 'object') {
+            // Add the property as-is to the definition
+            definition.properties[key] = property;
+        } else {
+            // Replace the property with a reference,
+            // and search for definitions recursively.
+            definition.properties[key] = {
+                description: property.description,
+                type: { kind: "xref", target: property.type.definitionName }
+            };
+            if (property.gaVersion != undefined) {
+                definition.properties[key].gaVersion = property.gaVersion;
+            }
+            if (property.previewVersion != undefined) {
+                definition.properties[key].previewVersion = property.previewVersion;
+            }
+
+            definitions = concatRecords([
+                definitions, 
+                definitionsFromFieldType(property.type, targetVersion)
+            ]);
+        }
+    }
+
+    definitions[ft.definitionName] = definition;
+    return definitions;
+}
+
+export function serializeDefinition(definition: Definition): Record<string,unknown> {
+    var result = {
+        description: definition.description,
+        type: "object",
+        properties: {},
+        required: new Array<string>()
+    };
+
+    const properties: Record<string,unknown> = {};
+    const requiredFields: Array<string> = [];
+
+    for (const key in definition.properties) {
+        const property = definition.properties[key];
+        if (property.required) {
+            requiredFields.push(key);
+        }
+        properties[key] = concatObjects([
+            { description: property.description },
+            serializeFieldType(property.type),
+            serializeMutability(property.mutability)
+        ]);
+    }
+
+    result.properties = properties;
+    if (requiredFields.length > 0) {
+        result.required = requiredFields;
+    }
+    
+    return result;
+}
+
+//#endregion
+
+// target.properties = {};
+// {
+//     const requiredProperties = [];
+//     const properties: Record<string, unknown> = {}
+//     for (const propertyName in ft.properties) {
+//         const pr = ft.properties[propertyName];
+//         const sp = serializeProperty(propertyName, targetVersion, pr);
+//         if (sp != null) {
+//             properties[propertyName] = sp;
+//         }
+//         if (pr?.required) {
+//             requiredProperties.push(propertyName);
 //         }
 //     }
+//     target.properties = properties;
+//     if (requiredProperties.length > 0) {
+//         target.required = requiredProperties;
+//     }
+// }
 
 
 // export function serializeProperty(name: string, targetVersion: TargetVersion, p: Property): Record<string,unknown>|null {
