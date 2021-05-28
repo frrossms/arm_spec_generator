@@ -40,16 +40,16 @@ export function capitalize(s: string): string {
 //#region Mutability
 /**
  * Mutability of properties
- * 
+ *
  * Properties in Swagger are annotated with mutability in two ways.
  * Swagger itself defines a `readOnly` property, and Microsoft Azure
  * defines an extension `x-ms-mutability` that takes an array of
  * one or more of the strings `"create"`, `"write"`, and `"read"`.
  * We represent these as `Set<Mutability>`.
- * 
+ *
  * If `x-ms-mutability` is omitted, it means read, create, and update,
  * and we will keep that semantics.
- * 
+ *
  * The ARM contract requires that all properties be readable unless
  * they are secrets, and that secrets must not be readable. We will
  * assume that any mutability without read defines a secret.
@@ -87,7 +87,7 @@ export function serializeMutability(mt: Set<Mutability>|undefined) {
 //#region API versions
 /**
  * API versions
- * 
+ *
  * Each resource type, method on a resource, and properties of
  * resources or method response bodies has two API versions associated
  * with it: `previewVersion` and `gaVersion`. They are represented in
@@ -115,9 +115,9 @@ export interface Versioned {
  * after that date is skipped. A preview target version uses all
  * resources and properties with preview or GA version before it.
  * A GA target version only uses properties with a GA version before it.
- * 
+ *
  * If there is a deprecatedOn date set, then if the Versioned object is
- * only in preview, it will cease to be generated six months after the 
+ * only in preview, it will cease to be generated six months after the
  * deprecatedOn date. If the versioned object is in GA, then it cease to
  * be generated three years after the deprecatedOn date.
  */
@@ -154,14 +154,14 @@ function atMost(a: Version, b: Version) {
 
 export function inVersion(it: Versioned, targetVersion: TargetVersion): boolean {
     const [version, kind] = targetVersion;
-    
+
     // First check if we are past when a deprecated field
     // should be removed.
     const rd = removalDate(it);
     if (rd !== null && atMost(rd, version)) {
         return false;
     }
-    
+
     if (kind == VersionKind.Preview) {
         return (it.previewVersion != undefined && atMost(it.previewVersion, version))
                 || (it.gaVersion != undefined && atMost(it.gaVersion, version));
@@ -189,7 +189,7 @@ export function serializeVersion(version: TargetVersion): string {
 /**
  * The third part of a Swagger file is its definitions. These given the
  * schemas of various structures accepted and returned by endpoints.
- * 
+ *
  * A definition always an object type. Its properties are either non-object
  * fields or a reference to another definition.
  */
@@ -206,14 +206,14 @@ export interface Definition {
  * Simple types, like booleans or integers, are represented by constants
  * like BoolT and Int32T, which are themselves members of a discriminated
  * union.
- * 
+ *
  * The one special case is objects. Objects generally are supposed to have
  * their own entries in the definitions section of a Swagger file and be
  * referred to with a `"$ref"` entry where they are used. When we serialize
  * fields we have two things to serialize. We need to serialize the actual
  * type description with references to other definitions, and we need
  * to serialize any definitions that emerge from the type description.
- * 
+ *
  * Fields are versioned, so we pass TargetVersions into all methods that operate
  * on them, and return null if there would be nothing generated.
  */
@@ -227,15 +227,15 @@ interface Int64Field { kind: "int64" }
 interface FloatField { kind: "float" }
 interface ArrayField { kind: "array", elementKind: FieldType }
 interface EnumField { kind: "enum", typeName: string, values: Array<string> }
-interface ObjectField { 
-    kind: "object", 
-    definitionName: string, 
+interface ObjectField {
+    kind: "object",
+    definitionName: string,
     description: string,
-    properties: Record<string, Property> 
+    properties: Record<string, Property>
 }
 interface XRefField { kind: "xref", target: string }
 
- export type FieldType = 
+ export type FieldType =
     | BoolField
     | StringField
     | Int32Field
@@ -252,19 +252,20 @@ export const Int32T: Int32Field = { kind: "int32" };
 export const Int64T: Int64Field = { kind: "int64" };
 export const FloatT: FloatField = { kind: "float" };
 export function ArrayT(t: FieldType): ArrayField {
-    return { kind: "array", elementKind: t } 
+    return { kind: "array", elementKind: t }
 }
-export function ObjectT(definitionName: string, description: string, properties: Record<string, Property>): ObjectField { 
-    return { 
-        kind: "object", 
-        definitionName: definitionName, 
-        description: description, 
-        properties: properties 
-    }; 
+export function ObjectT(definitionName: string, description: string, properties: Record<string, Property>): ObjectField {
+    return {
+        kind: "object",
+        definitionName: definitionName,
+        description: description,
+        properties: properties
+    };
 }
-export function EnumT(typeName: string, vs: Array<string>): EnumField { 
+export function EnumT(typeName: string, vs: Array<string>): EnumField {
     return { kind: "enum", typeName: typeName, values: vs };
 }
+export function XRefT(target: string): XRefField { return { kind: "xref", target: target }; }
 
 interface Property extends Versioned {
     description: string;
@@ -356,7 +357,7 @@ export function definitionsFromFieldType(
             }
 
             definitions = concatRecords([
-                definitions, 
+                definitions,
                 definitionsFromFieldType(property.type, targetVersion)
             ]);
         }
@@ -393,13 +394,13 @@ export function serializeDefinition(definition: Definition): Record<string,unkno
     if (requiredFields.length > 0) {
         result.required = requiredFields;
     }
-    
+
     return result;
 }
 //#endregion
 
 //#region Path suffixes
-export interface ParameterSegment { 
+export interface ParameterSegment {
     name: string,
     minLength?: number,
     maxLength?: number,
@@ -415,11 +416,11 @@ export function serializePathSuffix(ps: PathSuffix) {
     }).join('/')
 }
 
-export function resourceDefinitionName(ps: PathSuffix) {
+export function resourceDefinitionName(ps: PathSuffix, suffix: string = 'Resource') {
     if (ps.length == 0) {
         throw Error('Cannot get resourceTypeName of empty PathSuffix.');
     }
-    return capitalize(ps[ps.length-1][0]) + 'Resource';
+    return capitalize(ps[ps.length-1][0]) + suffix;
 }
 //#endregion
 
@@ -572,8 +573,8 @@ export function parametersFromResource(resource: Resource, targetVersion: Target
 }
 
 export function pathsFromResource(resource: Resource, namespace: string, targetVersion: TargetVersion): Record<string, unknown> {
-    var paths: Record<string, unknown> = {}
-    
+    var paths: Record<string, unknown> = {};
+
     const resourcePath = `/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/${namespace}/${serializePathSuffix(resource.path)}`
     paths[resourcePath] = {
         "get": serializeHandler(resource, Method.Get),
@@ -586,8 +587,59 @@ export function pathsFromResource(resource: Resource, namespace: string, targetV
     return paths;
 }
 
+const commonTrackedProperties: Record<string, Property> = {
+    id: {
+        type: StringT,
+        description: "The unique resource identifier of the ARM resource.",
+        mutability: ReadOnly
+    },
+    name: {
+        type: StringT,
+        description: "The name of the ARM resource.",
+        mutability: Immutable
+
+    },
+    type: {
+        type: StringT,
+        description: "The type of Azure resource.",
+        mutability: ReadOnly
+    },
+    location: {
+        type: StringT,
+        description: "The location this resource exists in.",
+        mutability: Immutable
+    }
+    // TODO: Add tags. Need a new TagT type that serializes specially.
+}
+
 export function definitionsFromResource(resource: Resource, targetVersion: TargetVersion): Record<string, unknown> {
-    return {}
+    var definitions: Record<string, unknown> = {};
+
+    // TODO: Add "x-ms-azure-resource": true to resource in appropriate place.
+
+    var properties = null;
+    if (resource.resourceType == ResourceType.Tracked) {
+        properties = commonTrackedProperties;
+    } else {
+        properties = {};
+    }
+    properties["properties"] = {
+        type: XRefT(resourceDefinitionName(resource.path, 'Properties')),
+        description: `Properties of a ${resource.readableName}.`
+        // TODO: Add support for x-ms-client-flatten to XRefT.
+    };
+
+    definitions[resourceDefinitionName(resource.path)] = serializeDefinition({
+       description: `A ${resource.readableName}.`,
+       properties: properties
+    });
+    definitions[resourceDefinitionName(resource.path, 'Properties')] = serializeDefinition({
+        description: `Properties of a ${resource.readableName}`,
+        properties: resource.properties
+    })
+    // TODO: Add definitions from methods and async methods.
+
+    return definitions;
 }
 
 
@@ -603,10 +655,12 @@ export interface Module {
 }
 
 export function serializeModule(module: Module, targetVersion: TargetVersion): Record<string, unknown> {
+    let resourcesInVersion = module.resources.filter(resource => inVersion(resource, targetVersion));
     var paths: Record<string, unknown> = concatRecords(
-        module.resources
-            .filter(resource => inVersion(resource, targetVersion))
-            .map(resource => pathsFromResource(resource, module.namespace, targetVersion))
+        resourcesInVersion.map(resource => pathsFromResource(resource, module.namespace, targetVersion))
+    );
+    var definitions: Record<string, unknown> = concatRecords(
+        resourcesInVersion.map(resource => definitionsFromResource(resource, targetVersion))
     );
 
     return {
@@ -646,7 +700,7 @@ export function serializeModule(module: Module, targetVersion: TargetVersion): R
         },
         "paths": paths,
         "parameters": {}, // TODO
-        "definitions": {} // TODO
+        "definitions": definitions // TODO
     };
 }
 
@@ -656,7 +710,7 @@ export function generateSwagger(module: Module, targetPath: string, versions: Ar
         const dir = targetPath + "/" + subdir + "/" + serializeVersion(version);
         ensureDirSync(dir);
         Deno.writeTextFileSync(
-            dir + "/" + module.filename, 
+            dir + "/" + module.filename,
             JSON.stringify(serializeModule(module, version), null, '    '));
     });
 }
@@ -730,7 +784,7 @@ export function generateSwagger(module: Module, targetPath: string, versions: Ar
 //     //             break;
 //     //         case 'delete':
 //     //             break;
-//     //     }        
+//     //     }
 
 //     //     const exampleObj: Record<string, unknown> = {}
 //     //     exampleObj[`${rt}_${method}`] = {
@@ -767,7 +821,7 @@ export function generateSwagger(module: Module, targetPath: string, versions: Ar
 //         delete: {},
 //     };
 
-    
+
 
 
 //     // Add path to generated examples
@@ -810,7 +864,7 @@ export function generateSwagger(module: Module, targetPath: string, versions: Ar
 //     if (!inVersion(targetVersion, module)) { // Fix with inVersion
 //         return null; // Generating a version before this module was defined.
 //     }
-    
+
 //     // This is fixed preamble.
 //     const obj = {
 //         "swagger": "2.0",
