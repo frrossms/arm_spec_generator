@@ -1,0 +1,234 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "Example",
+        "description": "Example module to generate Swagger generation.",
+        "version": "2021-04-01-preview"
+    },
+    "host": "management.azure.com",
+    "schemes": [
+        "https"
+    ],
+    "consumes": [
+        "application/json"
+    ],
+    "produces": [
+        "application/json"
+    ],
+    "security": [
+        {
+            "azure_auth": [
+                "user_impersonation"
+            ]
+        }
+    ],
+    "securityDefinitions": {
+        "azure_auth": {
+            "type": "oauth2",
+            "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+            "flow": "implicit",
+            "description": "Azure Active Directory OAuth2 Flow",
+            "scopes": {
+                "user_impersonation": "Impersonate your user account"
+            }
+        }
+    },
+    "paths": {
+        "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Example/genericResources/{resourceName}": {
+            "get": {
+                "operationId": "Generic resources_Get",
+                "parameters": [
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/SubscriptionIdParameter"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter"
+                    },
+                    {
+                        "$ref": "#/parameters/resourceName"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
+                    }
+                ],
+                "description": "Get the properties of this generic resource.",
+                "responses": {
+                    "200": {
+                        "description": "The properties of this generic resource were retrieved successfully.",
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "operationId": "Generic resources_CreateUpdate",
+                "parameters": [
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/SubscriptionIdParameter"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter"
+                    },
+                    {
+                        "$ref": "#/parameters/resourceName"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
+                    },
+                    {
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        },
+                        "description": "The properties to set on this generic resource."
+                    }
+                ],
+                "description": "Create or update this generic resource. If updating, all properties must be provided. Use PATCH to update with only some properties.",
+                "x-ms-long-running-operation": true,
+                "responses": {
+                    "200": {
+                        "description": "This generic resource is being updated. Poll for provisioningState=Succeeded, Failed, or Cancelled for completion.",
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        }
+                    },
+                    "201": {
+                        "description": "This generic resource is being created. Poll for provisioningState=Succeeded, Failed, or Cancelled for completion.",
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "Generic resources_Update",
+                "parameters": [
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/SubscriptionIdParameter"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter"
+                    },
+                    {
+                        "$ref": "#/parameters/resourceName"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
+                    },
+                    {
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        },
+                        "description": "The properties to set on this generic resource."
+                    }
+                ],
+                "description": "Update properties of this generic resource. Any properties not provided will not be altered.",
+                "x-ms-long-running-operation": true,
+                "responses": {
+                    "200": {
+                        "description": "Completed synchronously. This will only happen if the values provided match those already present in this generic resource.",
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        }
+                    },
+                    "202": {
+                        "description": "This generic resource is being updated asynchronously. Poll the provided operation for completion.",
+                        "schema": {
+                            "$ref": "#/definitions/GenericResourcesResource"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "Generic resources_Delete",
+                "parameters": [
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/SubscriptionIdParameter"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter"
+                    },
+                    {
+                        "$ref": "#/parameters/resourceName"
+                    },
+                    {
+                        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
+                    }
+                ],
+                "description": "Delete this generic resource.",
+                "x-ms-long-running-operation": true,
+                "responses": {
+                    "202": {
+                        "description": "Accepted. This generic resource will be deleted asynchronously."
+                    },
+                    "204": {
+                        "description": "No such generic resource to delete."
+                    }
+                }
+            }
+        }
+    },
+    "parameters": {},
+    "definitions": {
+        "GenericResourcesResource": {
+            "description": "A generic resource.",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "The unique resource identifier of the ARM resource.",
+                    "type": "string",
+                    "x-ms-mutability": [
+                        "read"
+                    ],
+                    "readOnly": true
+                },
+                "name": {
+                    "description": "The name of the ARM resource.",
+                    "type": "string",
+                    "x-ms-mutability": [
+                        "create",
+                        "read"
+                    ]
+                },
+                "type": {
+                    "description": "The type of Azure resource.",
+                    "type": "string",
+                    "x-ms-mutability": [
+                        "read"
+                    ],
+                    "readOnly": true
+                },
+                "location": {
+                    "description": "The location this resource exists in.",
+                    "type": "string",
+                    "x-ms-mutability": [
+                        "create",
+                        "read"
+                    ]
+                },
+                "properties": {
+                    "description": "Properties of a generic resource.",
+                    "$ref": "#/definitions/GenericResourcesProperties"
+                }
+            },
+            "required": []
+        },
+        "GenericResourcesProperties": {
+            "description": "Properties of a generic resource",
+            "type": "object",
+            "properties": {
+                "field1": {
+                    "description": "First field of the resource.",
+                    "type": "string"
+                }
+            },
+            "required": []
+        }
+    }
+}
