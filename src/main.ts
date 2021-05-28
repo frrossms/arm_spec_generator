@@ -433,7 +433,7 @@ export enum ResourceType { Tracked, Proxy, ReadOnlyProxy }
 
 export interface Resource extends Versioned {
     path: PathSuffix;
-    resourceKind: ResourceType;
+    resourceType: ResourceType;
     readableName: string,
     readablePluralName: string;
     //examples: [ResourceExample];
@@ -477,7 +477,7 @@ export function serializeHandler(resource: Resource, method: Method): Record<str
     ];
     resource.path.forEach(segment => {
         const parameterName = segment[1].name;
-        parameters.push({"$ref": `#/parameters/${parameterName}Resource`});
+        parameters.push({"$ref": `#/parameters/${parameterName}`});
     });
     parameters.push({
         "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
@@ -572,7 +572,18 @@ export function parametersFromResource(resource: Resource, targetVersion: Target
 }
 
 export function pathsFromResource(resource: Resource, namespace: string, targetVersion: TargetVersion): Record<string, unknown> {
-    return {};
+    var paths: Record<string, unknown> = {}
+    
+    const resourcePath = `/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/${namespace}/${serializePathSuffix(resource.path)}`
+    paths[resourcePath] = {
+        "get": serializeHandler(resource, Method.Get),
+        "put": serializeHandler(resource, Method.Put),
+        "patch": serializeHandler(resource, Method.Patch),
+        "delete": serializeHandler(resource, Method.Delete)
+    }
+    // TODO: Add paths from methods and async methods.
+
+    return paths;
 }
 
 export function definitionsFromResource(resource: Resource, targetVersion: TargetVersion): Record<string, unknown> {
@@ -592,6 +603,12 @@ export interface Module {
 }
 
 export function serializeModule(module: Module, targetVersion: TargetVersion): Record<string, unknown> {
+    var paths: Record<string, unknown> = concatRecords(
+        module.resources
+            .filter(resource => inVersion(resource, targetVersion))
+            .map(resource => pathsFromResource(resource, module.namespace, targetVersion))
+    );
+
     return {
         "swagger": "2.0",
         "info": {
@@ -627,7 +644,7 @@ export function serializeModule(module: Module, targetVersion: TargetVersion): R
                 }
             }
         },
-        "paths": {}, // TODO
+        "paths": paths,
         "parameters": {}, // TODO
         "definitions": {} // TODO
     };

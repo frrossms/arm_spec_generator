@@ -643,7 +643,7 @@ const resource: Resource = {
   path: [["accounts", { name: "accountName" }], ["collections", {
     name: "collections",
   }]],
-  resourceKind: ResourceType.Tracked,
+  resourceType: ResourceType.Tracked,
   readableName: "collection",
   readablePluralName: "collections",
   properties: {
@@ -676,10 +676,10 @@ const serializeHandlerTestData: Array<
             "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter",
         },
         {
-          "$ref": "#/parameters/accountNameResource",
+          "$ref": "#/parameters/accountName",
         },
         {
-          "$ref": "#/parameters/collectionsResource",
+          "$ref": "#/parameters/collections",
         },
         {
           "$ref":
@@ -716,10 +716,10 @@ const serializeHandlerTestData: Array<
             "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter",
         },
         {
-          "$ref": "#/parameters/accountNameResource",
+          "$ref": "#/parameters/accountName",
         },
         {
-          "$ref": "#/parameters/collectionsResource",
+          "$ref": "#/parameters/collections",
         },
         {
           "$ref":
@@ -755,10 +755,10 @@ const serializeHandlerTestData: Array<
             "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter",
         },
         {
-          "$ref": "#/parameters/accountNameResource",
+          "$ref": "#/parameters/accountName",
         },
         {
-          "$ref": "#/parameters/collectionsResource",
+          "$ref": "#/parameters/collections",
         },
         {
           "$ref":
@@ -809,10 +809,10 @@ const serializeHandlerTestData: Array<
             "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter",
         },
         {
-          "$ref": "#/parameters/accountNameResource",
+          "$ref": "#/parameters/accountName",
         },
         {
-          "$ref": "#/parameters/collectionsResource",
+          "$ref": "#/parameters/collections",
         },
         {
           "$ref":
