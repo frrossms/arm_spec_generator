@@ -1,3 +1,6 @@
+import { ensureDirSync } from "https://deno.land/std@0.97.0/fs/ensure_dir.ts";
+
+
 export function concatObjects(objs: Array<Record<string,unknown>>): Record<string,unknown> {
     const result: Record<string,unknown> = {}
     objs.forEach(obj => {
@@ -28,6 +31,10 @@ export function concatRecords<T>(records: Array<Record<string,T>>): Record<strin
         }
     });
     return result;
+}
+
+export function capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 //#region Mutability
@@ -98,7 +105,8 @@ export type Version = [number, number, number];
 
 export interface Versioned {
     previewVersion?: Version,
-    gaVersion?: Version
+    gaVersion?: Version,
+    deprecatedOn?: Version
 }
 
 /**
@@ -107,17 +115,58 @@ export interface Versioned {
  * after that date is skipped. A preview target version uses all
  * resources and properties with preview or GA version before it.
  * A GA target version only uses properties with a GA version before it.
+ * 
+ * If there is a deprecatedOn date set, then if the Versioned object is
+ * only in preview, it will cease to be generated six months after the 
+ * deprecatedOn date. If the versioned object is in GA, then it cease to
+ * be generated three years after the deprecatedOn date.
  */
 export enum VersionKind { Preview, GA }
 export type TargetVersion = [Version, VersionKind];
 
+
+export function removalDate(it: Versioned): Version|null {
+    if (it.deprecatedOn == undefined) {
+        return null;
+    }
+
+    const [year, month, day] = it.deprecatedOn;
+    if (it.gaVersion != undefined) {
+        return [year+3, month, day];
+    } else if (it.previewVersion != undefined) {
+        if (month > 5) {
+            return [year+1, month-5, day];
+        } else {
+            return [year, month+6, day];
+        }
+    } else {
+        return null;
+    }
+}
+
+function atMost(a: Version, b: Version) {
+    const [yearA, monthA, dayA] = a;
+    const [yearB, monthB, dayB] = b;
+    return (yearA < yearB) ||
+        (yearA == yearB && monthA < monthB) ||
+        (yearA == yearB && monthA == monthB && dayA <= dayB);
+}
+
 export function inVersion(it: Versioned, targetVersion: TargetVersion): boolean {
     const [version, kind] = targetVersion;
+    
+    // First check if we are past when a deprecated field
+    // should be removed.
+    const rd = removalDate(it);
+    if (rd !== null && atMost(rd, version)) {
+        return false;
+    }
+    
     if (kind == VersionKind.Preview) {
-        return (it.previewVersion != undefined && it.previewVersion <= version)
-            || (it.gaVersion != undefined && it.gaVersion <= version);
+        return (it.previewVersion != undefined && atMost(it.previewVersion, version))
+                || (it.gaVersion != undefined && atMost(it.gaVersion, version));
     } else {
-        return it.gaVersion != undefined && it.gaVersion <= version;
+        return it.gaVersion != undefined && atMost(it.gaVersion, version);
     }
 }
 
@@ -150,7 +199,6 @@ export interface Definition {
 }
 
 //#endregion
-
 
 //#region Field types
 /**
@@ -348,95 +396,283 @@ export function serializeDefinition(definition: Definition): Record<string,unkno
     
     return result;
 }
-
 //#endregion
 
-// target.properties = {};
-// {
-//     const requiredProperties = [];
-//     const properties: Record<string, unknown> = {}
-//     for (const propertyName in ft.properties) {
-//         const pr = ft.properties[propertyName];
-//         const sp = serializeProperty(propertyName, targetVersion, pr);
-//         if (sp != null) {
-//             properties[propertyName] = sp;
-//         }
-//         if (pr?.required) {
-//             requiredProperties.push(propertyName);
-//         }
-//     }
-//     target.properties = properties;
-//     if (requiredProperties.length > 0) {
-//         target.required = requiredProperties;
-//     }
-// }
+//#region Path suffixes
+export interface ParameterSegment { 
+    name: string,
+    minLength?: number,
+    maxLength?: number,
+    pattern?: string,
+}
 
+export type PathSuffix = Array<[string, ParameterSegment]>
 
-// export function serializeProperty(name: string, targetVersion: TargetVersion, p: Property): Record<string,unknown>|null {
-//     if (name == null || name.length == 0) {
-//         throw Error("name must be nonempty.");
-//     }
+export function serializePathSuffix(ps: PathSuffix) {
+    return ps.map(v => {
+        const [type, param] = v;
+        return `${type}/{${param.name}}`;
+    }).join('/')
+}
 
-//     if (!inVersion(targetVersion, p)) {
-//         return null;
-//     }
+export function resourceDefinitionName(ps: PathSuffix) {
+    if (ps.length == 0) {
+        throw Error('Cannot get resourceTypeName of empty PathSuffix.');
+    }
+    return capitalize(ps[ps.length-1][0]) + 'Resource';
+}
+//#endregion
 
-//     const r: Record<string, unknown> = {
-//         description: p.description
-//     };
-    
-//     // Mutability
-//     const isReadable = p.mutability == undefined || p.mutability.has(Mutability.Read)
-//     const isSecret = p.type.kind == "secret";
-//     if (isSecret && isReadable) {
-//         throw Error('Secret properties must not be readable.');
-//     } else if (!isSecret && !isReadable) {
-//         throw Error('All non-secret properties must be readable.');
-//     } else if (p.mutability == ReadOnly) {
-//         r['x-ms-mutability'] = ["read"];
-//         r['readOnly'] = true;
-//     } else if (p.mutability != undefined) {
-//         r['x-ms-mutability'] = serializeMutability(p.mutability);
-//     }
-
-//     serializeFieldType(name, targetVersion, p.type, r);
-
-
-//     return r;
-// }
-
-// export interface ParameterSegment { 
-//     name: string,
-//     minLength?: number,
-//     maxLength?: number,
-//     pattern?: string,
-// }
-
-// export type PathSuffix = Array<[string, ParameterSegment]>
-
-// export function serializePathSuffix(ps: PathSuffix) {
-//     return ps.map(v => {
-//         const [type, param] = v;
-//         return `${type}/{${param.name}}`;
-//     }).join('/')
-// }
-
-// enum ResourceType { Tracked, Proxy }
+//#region Resources
+export enum ResourceType { Tracked, Proxy, ReadOnlyProxy }
 
 // interface ResourceExample {
 //     parameters: Array<string>,
 //     properties: Record<string, unknown>
 // }
 
-// interface Resource extends Versioned {
-//     path: PathSuffix;
-//     resourceKind: ResourceType;
-//     readableName: string;
-//     examples: [ResourceExample];
-//     properties: Record<string, Property>;
-//     methods?: Record<string, Method>;
-//     asyncMethods?: Record<string, Method>;
-// }
+export interface Resource extends Versioned {
+    path: PathSuffix;
+    resourceKind: ResourceType;
+    readableName: string,
+    readablePluralName: string;
+    //examples: [ResourceExample];
+    properties: Record<string, Property>;
+    //methods?: Record<string, Method>;
+    //asyncMethods?: Record<string, Method>;
+}
+
+export enum Method { Get = "get", Put = "put", Patch = "patch", Delete = "delete" };
+
+export function serializeHandler(resource: Resource, method: Method): Record<string, unknown> {
+    var opKind: string;
+    switch (method) {
+        case Method.Get:
+            opKind = "Get";
+            break;
+        case Method.Put:
+            opKind = "CreateUpdate";
+            break;
+        case Method.Patch:
+            opKind = "Update";
+            break;
+        case Method.Delete:
+            opKind = "Delete";
+            break;
+    }
+
+    const target: Record<string, unknown> = {
+        operationId: `${capitalize(resource.readablePluralName)}_${opKind}`,
+    };
+
+    const defn = `#/definitions/${resourceDefinitionName(resource.path)}`;
+
+    const parameters: Array<Record<string, unknown>> = [
+        {
+            "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/SubscriptionIdParameter"
+        },
+        {
+            "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ResourceGroupNameParameter"
+        },
+    ];
+    resource.path.forEach(segment => {
+        const parameterName = segment[1].name;
+        parameters.push({"$ref": `#/parameters/${parameterName}Resource`});
+    });
+    parameters.push({
+        "$ref": "../../../../../common-types/resource-management/v2/types.json#/parameters/ApiVersionParameter"
+    })
+    if (method == Method.Put || method == Method.Patch) {
+        parameters.push({
+            name: "body",
+            in: "body",
+            required: true,
+            schema: {
+                "$ref": defn
+            },
+            description: `The properties to set on this ${resource.readableName}.`
+        });
+    }
+    target.parameters = parameters;
+
+    switch (method) {
+        case Method.Get:
+            target.description = `Get the properties of this ${resource.readableName}.`;
+            break;
+        case Method.Put:
+            target.description = `Create or update this ${resource.readableName}. If updating, all properties must be provided. Use PATCH to update with only some properties.`;
+            break;
+        case Method.Delete:
+            target.description = `Delete this ${resource.readableName}.`;
+            break;
+        case Method.Patch:
+            target.description = `Update properties of this ${resource.readableName}. Any properties not provided will not be altered.`;
+            break;
+    }
+
+    if (method != Method.Get) {
+        target["x-ms-long-running-operation"] = true;
+    }
+
+    const responses: Record<string,unknown> = {};
+    switch (method) {
+        case Method.Get:
+            responses['200'] = {
+                description: `The properties of this ${resource.readableName} were retrieved successfully.`,
+                schema: {
+                    "$ref": defn
+                }
+            }
+            break;
+        case Method.Delete:
+            responses["202"] = {
+                description: `Accepted. This ${resource.readableName} will be deleted asynchronously.`
+            };
+            responses["204"] = {
+                description: `No such ${resource.readableName} to delete.`
+            }
+            break;
+        case Method.Put:
+            responses["200"] = {
+                description: `This ${resource.readableName} is being updated. Poll for provisioningState=Succeeded, Failed, or Cancelled for completion.`,
+                schema: {
+                    "$ref": defn
+                }
+            };
+            responses["201"] = {
+                description: `This ${resource.readableName} is being created. Poll for provisioningState=Succeeded, Failed, or Cancelled for completion.`,
+                schema: {
+                    "$ref": defn
+                }
+            }
+            break;
+        case Method.Patch:
+            responses["200"] = {
+                description: `Completed synchronously. This will only happen if the values provided match those already present in this ${resource.readableName}.`,
+                schema: {
+                  "$ref": defn
+                }
+            };
+            responses["202"] = {
+                description: `This ${resource.readableName} is being updated asynchronously. Poll the provided operation for completion.`,
+                schema: {
+                    "$ref": defn
+                }
+            };
+    }
+    target.responses = responses;
+
+    return target;
+}
+//#endregion
+
+//#region Generating modules:
+export function parametersFromResource(resource: Resource, targetVersion: TargetVersion): Record<string, unknown> {
+    return {};
+}
+
+export function pathsFromResource(resource: Resource, namespace: string, targetVersion: TargetVersion): Record<string, unknown> {
+    return {};
+}
+
+export function definitionsFromResource(resource: Resource, targetVersion: TargetVersion): Record<string, unknown> {
+    return {}
+}
+
+
+// //#endregion
+
+// //#region Serialize module
+export interface Module {
+    filename: string,
+    title: string,
+    description: string,
+    namespace: string,
+    resources: Array<Resource>
+}
+
+export function serializeModule(module: Module, targetVersion: TargetVersion): Record<string, unknown> {
+    return {
+        "swagger": "2.0",
+        "info": {
+            "title": module.title,
+            "description": module.description,
+            "version": serializeVersion(targetVersion)
+        },
+        "host": "management.azure.com",
+        "schemes": [
+            "https"
+        ],
+        "consumes": [
+            "application/json"
+        ],
+        "produces": [
+            "application/json"
+        ],
+        "security": [
+            {
+                "azure_auth": [
+                    "user_impersonation"
+                ]
+            }
+        ],
+        "securityDefinitions": {
+            "azure_auth": {
+                "type": "oauth2",
+                "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+                "flow": "implicit",
+                "description": "Azure Active Directory OAuth2 Flow",
+                "scopes": {
+                    "user_impersonation": "Impersonate your user account"
+                }
+            }
+        },
+        "paths": {}, // TODO
+        "parameters": {}, // TODO
+        "definitions": {} // TODO
+    };
+}
+
+export function generateSwagger(module: Module, targetPath: string, versions: Array<TargetVersion>) {
+    versions.forEach(version => {
+        const subdir = version[1] == VersionKind.Preview ? "preview" : "stable";
+        const dir = targetPath + "/" + subdir + "/" + serializeVersion(version);
+        ensureDirSync(dir);
+        Deno.writeTextFileSync(
+            dir + "/" + module.filename, 
+            JSON.stringify(serializeModule(module, version), null, '    '));
+    });
+}
+
+//#endregion
+
+// TODO:
+// Handler (get, put, patch, delete)
+
+// Post methods
+// - parametersFromPostMethod(PostMethod, TargetVersion)
+// - definitionsFromPostMethod(PostMethod, TargetVersion)
+// - pathsFromPostMethod(PostMethod, TargetVersion)
+//
+// Resource (contains post methods)
+// - parametersFromResource(Resource, TargetVersion)
+// - pathsFromResource(Resource, TargetVersion) (include listing the resource)
+// - definitionsFromResource(Resource, TargetVersion)
+//
+// - serializeModule(provider: string, resources: Array<Resouce>, TargetVersion)
+//
+// Add examples
+//
+// Then work for readme.md
+// - serializeProvider(provider: string, Array<Resource>, Array<TargetVersion>)
+// Add suppression rules
+
+// Probably will need:
+// - alias for existing definitions so type names in SDKs don't break.
+// - legacy endpoint
+// - singleton extended status GETs
+
+//#region Old
 
 // // Resources generate:
 // // - paths, with get, put, patch, and delete methods, and post
@@ -672,3 +908,4 @@ export function serializeDefinition(definition: Definition): Record<string,unkno
 
 //     return obj;
 // }
+//#endregion
